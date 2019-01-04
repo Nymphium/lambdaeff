@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 module Syntax where
 
 type EffectP = Int
@@ -5,15 +6,15 @@ type EffectP = Int
 data Term = Var String
           | Fun String Term
           | Eff EffectP
-          | App Term Term
+          | Term :@: Term
           | Perform Term Term
           | Let String Term Term
           | Inst
           | WithH Term Term
           | Handler Term (String , Term) (String , String , Term)
           | Int Int
-          | Add Term Term
-          | Mul Term Term
+          | Term :+: Term
+          | Term :*: Term
           deriving (Show, Eq)
 
 data Value = VarV String
@@ -25,4 +26,3 @@ data Value = VarV String
            deriving (Show, Eq)
 
 type Stack = [Term -> Term]
-
