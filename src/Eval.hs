@@ -52,7 +52,11 @@ binapp (Int i :+: Int j) = Int $ i + j
 binapp (Int i :*: Int j) = Int $ i * j
 
 hole = Var "HOLE"
-kholex = "KHOLE"
+
+kfun :: Stack -> Term
+kfun es = do
+        let var = "KHOLE"
+        Fun var $ flatfn es (Var var)
 
 vh (Handler _ it _) = it
 effh (Handler _ _ it) = it
@@ -80,10 +84,10 @@ eval1 (pf@(Perform eff e), s, es) idx
            f : s ->
                 case f hole of
                 WithH (Handler eff' (xv, ev) (xeff, k, eeff)) hole
-                    | eff' == eff ->
-                        let kf = Fun kholex $ flatfn es $ Var kholex
+                    | eff' == eff -> do
+                        let kf = kfun es
                             eeff' = substs eeff [(xeff, v), (k, kf)]
-                        in ((eeff', f : s, []), idx)
+                        ((eeff', f : s, []), idx)
                     | otherwise   -> resend
                 _ -> resend
                 where resend = ((pf, s, f : es), idx)
@@ -92,8 +96,8 @@ eval1 (Let x e body, s, es) idx
     | valuable e = ((subst body x e, s, es), idx)
     | otherwise  = ((e, flip (Let x) body : s, es), idx)
 eval1 (WithH h e, s, es) idx
-    | valuable e =
-        let (x, ev) = vh h in
+    | valuable e = do
+        let (x, ev) = vh h
         ((subst ev x e, s, es), idx)
     | otherwise  = ((e, WithH h : s, es), idx)
 eval1 (Inst, s, es) idx = ((Eff idx', s, es), idx') where idx' = idx + 1
