@@ -15,14 +15,7 @@ data Term = Var String
           | Int Int
           | Term :+: Term
           | Term :*: Term
+          | Abort
           deriving (Show, Eq)
-
-data Value = VarV String
-           | HandlerV Value (String, Term) (String, String, Term)
-           | FunV String Term
-           | EffV EffectP
-           | IntV Int
-           | Abort
-           deriving (Show, Eq)
 
 type Stack = [Term -> Term]

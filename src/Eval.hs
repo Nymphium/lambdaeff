@@ -29,6 +29,9 @@ subst (Handler eff (xv, ev) (xe, k, ee)) x t = Handler eff' vh effh
                  else subst ee x t
 subst (e1 :+: e2) x t = subst e1 x t :+: subst e2 x t
 subst (e1 :*: e2) x t = subst e1 x t :*: subst e2 x t
+subst (Let y e body) x t
+    | x == y = Let y (subst e x t) body
+    | otherwise = Let y (subst e x t) (subst body x t)
 subst others _ _ = others
 
 substs :: Term -> [(String, Term)] -> Term
@@ -41,15 +44,8 @@ valuable = \case
     Fun{}     -> True
     Eff _     -> True
     Int _     -> True
+    Abort     -> True
     _         -> False
-
-toValue :: Term -> Value
-toValue = \case
-    Handler eff vh effh -> HandlerV (toValue eff) vh effh
-    Var x               -> VarV x
-    Fun x body          -> FunV x body
-    Eff eff             -> EffV eff
-    Int i               -> IntV i
 
 binapp :: Term -> Term
 binapp (Int i :+: Int j) = Int $ i + j
@@ -79,14 +75,19 @@ eval1 (pf@(Perform eff e), s, es) idx
     | valuable eff && valuable e = send eff e s es
     | valuable eff               = ((e, Perform eff : s, es), idx)
     | otherwise                  = ((eff, flip Perform e : s, es), idx)
-    where send eff v (f : s) es =
-           case f hole of
-               WithH (Handler eff' (xv, ev) (xeff, k, eeff)) hole
-                   | eff' == eff ->
-                       let kf = Fun kholex $ flatfn es $ Var kholex
-                           eeff' = substs eeff [(xeff, v), (k, kf)]
-                       in ((eeff', s, []), idx)
-                   | otherwise   -> ((pf, s, f : es), idx)
+    where send eff v s es =
+           case s of
+           f : s ->
+                case f hole of
+                WithH (Handler eff' (xv, ev) (xeff, k, eeff)) hole
+                    | eff' == eff ->
+                        let kf = Fun kholex $ flatfn es $ Var kholex
+                            eeff' = substs eeff [(xeff, v), (k, kf)]
+                        in ((eeff', f : s, []), idx)
+                    | otherwise   -> resend
+                _ -> resend
+                where resend = ((pf, s, f : es), idx)
+           [] -> ((Abort, s, es), idx)
 eval1 (Let x e body, s, es) idx
     | valuable e = ((subst body x e, s, es), idx)
     | otherwise  = ((e, flip (Let x) body : s, es), idx)
