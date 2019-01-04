@@ -6,9 +6,18 @@
 \usepackage{amssymb,amsmath,stmaryrd,bcprules,xspace}
 \usepackage{etoolbox,xcolor,here}
 
+\usepackage[top=0pt,bottom=0pt,left=2cm,right=2cm]{geometry}
+
 \input{macro.tex}
 
+\author{nymphium}
+\title{\lambdaeff}
+
 \begin{document}
+\thispagestyle{empty}
+\maketitle
+
+\section*{Syntax}
 \begin{figure}[ht]
     \[
         \begin{array}{rrl}
@@ -16,70 +25,85 @@
             \variable{eff} & \in & \variable{Effects}\\
               &&\\
             v & ::= & x \mid h \mid \lambda x. e \mid \variable{eff}\\
-            e & ::= & v \mid v\ v \mid \letT{x}{e}{e}\\
+            e & ::= & v \mid e\ e \mid \letT{x}{e}{e}\\
               &\mid & \instT \mid \withhandle{v\ }{e} \\
               &\mid & \perform{\variable{e\ }{e}}\\
-            h & ::= & \handlerK\ v\ \left(\keyword{val} x \rightarrow e\right)\ \left(\left(x, k\right)\rightarrow e\right)\\
+            h & ::= & \handlerK v\ \left(\keyword{val} x \rightarrow e\right) \left(\left(x, k\right)\rightarrow e\right)\\
               &&\\
-            F & ::= & \square\ v \mid \letT{x}{\square}{e} \\
-              &\mid & \withhandle{v\ }{\square} \mid \perform{\square\ }{e} \mid \perform{\variable{v}}{\square}\\
-            s &::= & \left[\right] \mid F :: s \mid s @ s
+            F & ::= & e\ \square \mid \square\ v \mid \letT{x}{\square}{e} \\
+              &\mid & \withhandle{v\ }{\square} \mid \perform{\square\ }{e} \mid \perform{\variable{v\ }}{\square}\\
+            s &::= & \left[\right] \mid F :: s
         \end{array}
     \]
     \caption{the syntax of \lambdaeff}
     \label{fig:lambdaeff}
 \end{figure}
 
+\section*{Semantics}
 \newcommand{\flatfn}[1]{%
-  \variable{flatfn}\B{#1}
+  \variable{flatfn}\ #1
 }
 
 \begin{figure}[ht]
     \begin{flalign*}
         \flatfn{\left[\right]} &= \lambda x. x\\
-        \flatfn{F :: s} &= \lambda x. \left(\flatfn{s}\right)\ F\left[x\right]
+        \flatfn{\B{F :: s}} &= \lambda x. \flatfn{s}\ \B{F\left[x\right]}
     \end{flalign*}
 
     \caption{utils for the semanticcs}
 \end{figure}
 
 \begin{figure}[ht]
+    \newcommand{\defspace}{\vskip.5\baselineskip}
+
+    \centering
+
     \infax{\model{e}{s}{es} \mapsto \model{e'}{s'}{es'}}
     \vskip\baselineskip
 
-    \infax[Push]{\model{F\left[e\right]}{s}{es} \mapsto \model{e}{F :: s}{es}}
+    \infax[Push]{\model{F\left[e\right]}{s}{es} \mapsto \model{e}{F :: s}{es}}%
+    \defspace
 
-    \infax[Pop]{\model{v}{F :: s}{es} \mapsto \model{F\left[v\right]}{s}{es}}
+    \infax[Pop]{\model{v}{F :: s}{es} \mapsto \model{F\left[v\right]}{s}{es}}%
+    \defspace
 
-    \infax[Result]{\model{v}{[]}{es} \mapsto \model{v}{[]}{es}}
+    \infax[Result]{\model{v}{[]}{es} \mapsto \model{v}{[]}{es}}%
+    \defspace
 
-    \infax[Apply]{\model{\lambda x. e}{\left(\square\ v\right) :: s}{es} \mapsto \model{e\left[x = v\right]}{s}{es}}
+    \infax[Apply]{\model{\lambda x. e}{\left(\square\ v\right) :: s}{es} \mapsto \model{e\left[x = v\right]}{s}{es}}%
+    \defspace
 
-    \infax[Instanciate]{\model{\instT}{s}{es} \mapsto \model{\variable{eff}}{s}{es}}
+    \infax[Instanciate]{\model{\instT}{s}{es} \mapsto \model{\variable{eff}}{s}{es}}%
+    \defspace
 
     \infax[Rethrow]{%
         \model{\perform{\variable{eff}}{v}}{F :: s}{es}%
         \mapsto%
-        \model{\perform{\variable{eff}{v}}}{s}{F :: es}}
+        \model{\perform{\variable{eff}{v}}}{s}{F :: es}}%
+    \defspace
 
-    \infax[Handle]{%
-        \left\langle\begin{array}{c}
-            \perform{\variable{eff}}{v};\\
-            F :: s;\\
-            es
-            \end{array}\right\rangle
+    \infax[Handle\textsubscript{eff}]{%
+      \begin{array}{l}
+          \model{\perform{\variable{eff}}{v}}{F :: s}{es}%
+            \mapsto%
+            \model{e_\variable{eff}\left[x = v, k = \flatfn{es}\right]}{F :: s}{\left[\right]}\\%
+          \begin{array}{ll}
+            \mathrm{where} & F = \withhandle{h\ }{\square} \\
+                           & h = \handlerK \variable{eff} \left(\valK x \rightarrow e_v\right) \left(\left(x, k\right) \rightarrow e_\variable{eff}\right)
+          \end{array}
+      \end{array}}%
+    \defspace
+
+    \infax[Handle\textsubscript{v}]{%
+        \model{v}{\left(\handlerK \variable{eff} \left(\valK x \rightarrow e_v\right) \left(\left(x, k\right) \rightarrow e_\variable{eff}\right)\right) :: s}{es}%
         \mapsto%
-        \model{e_\variable{eff}\left[x = v, k = \flatfn{es}\right]}{F :: s}{\left[\right]}\\%
-        \begin{array}{ll}
-          \mathrm{where} & F = \B{\withhandle{h\ }{\square}} \\
-                         & h = \handlerK \variable{eff} \left(\valK x \rightarrow e_v\right) \left(\left(x, k\right) \rightarrow e_\variable{eff}\right)
-        \end{array}}
+        \model{e_v[x = v]}{s}{es}}%
+    \defspace
 
     \infax[Leak]{%
         \model{\perform{\variable{eff}}{v}}{\left[\right]}{es}%
         \mapsto%
-        \mathrm{abort}\\
-    }
+        \textsl{abort}}%
 
     \caption{the semantics of \lambdaeff}
 \end{figure}

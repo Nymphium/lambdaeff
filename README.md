@@ -10,3 +10,5 @@ Int 3
 Abort
 ```
 
+detailed: https://github.com/Nymphium/lambdaeff/blob/master/text/main.pdf
+
