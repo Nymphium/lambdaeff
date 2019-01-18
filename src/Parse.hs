@@ -19,7 +19,7 @@ import Text.Trifecta.Delta (Delta (Directed))
 type MonadicParsing m = (TokenParsing m, Monad m)
 
 (<!>) :: MonadicParsing m => m a -> m a -> m a
-(<!>) l r = l <|> try r
+(<!>) l = (l <|>) . try
 
 leffIdent :: MonadicParsing m => IdentifierStyle m
 leffIdent = styleReserved .~ HSet.fromList ["let", "in", "val", "perform", "inst", "with", "handle", "handler", "fun"]

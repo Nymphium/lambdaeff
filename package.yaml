@@ -30,6 +30,7 @@ library:
   - parsers
   - lens
   - unordered-containers
+  - mtl
 
 executables:
   lambdaeff-exe:

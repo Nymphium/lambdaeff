@@ -1,8 +1,10 @@
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase       #-}
+{-# LANGUAGE TupleSections    #-}
 
 module Eval where
 
+import Control.Monad.State
 import Syntax
 
 flatfn :: Stack -> Term -> Term
@@ -66,64 +68,66 @@ vh (Handler _ it _) = it
 effh (Handler _ _ it) = it
 
 -- small-step evaluation
-eval1 :: (Term, Stack, Stack) -> EffectP -> ((Term, Stack, Stack), EffectP)
+eval1 :: MonadState EffectP m => (Term, Stack, Stack) -> m (Term, Stack, Stack)
 -- pop
-eval1 (v, f : s, es) idx | valuable v = ((f v, s, es), idx)
+eval1 (v, f : s, es) | valuable v = pure (f v, s, es)
 -- result
-eval1 m@(v, [], _) idx | valuable v = (m, idx)
--- apply
-eval1 (Fun x body :@: v, s, es) idx | valuable v = ((subst body x v, s, es), idx)
-eval1 (e@(v1 :+: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
-eval1 (e@(v1 :-: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
-eval1 (e@(v1 :*: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
-eval1 (e@(v1 :/: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
--- push
-eval1 (f :@: e, s, es) idx
-    | valuable f = ((e, (f :@:) : s, es), idx)
-    | otherwise  = ((f, (:@: e) : s, es), idx)
-eval1 (pf@(Perform eff e), s, es) idx
-    | valuable eff && valuable e = send eff e s es
-    | valuable eff               = ((e, Perform eff : s, es), idx)
-    | otherwise                  = ((eff, flip Perform e : s, es), idx)
-    where send eff v s es =
-           case s of
-           f : s ->
-                case f hole of
-                WithH (Handler eff' (xv, ev) (xeff, k, eeff)) hole
-                    | eff' == eff -> do
-                        let kf = kfun es
-                            eeff' = substs eeff [(xeff, v), (k, kf)]
-                        ((eeff', f : s, []), idx)
-                    | otherwise   -> resend
-                _ -> resend
-                where resend = ((pf, s, f : es), idx)
-           [] -> ((Abort, s, es), idx)
-eval1 (Let x e body, s, es) idx
-    | valuable e = ((subst body x e, s, es), idx)
-    | otherwise  = ((e, flip (Let x) body : s, es), idx)
-eval1 (WithH h e, s, es) idx
+eval1 m@(v, [], _)   | valuable v = pure m
+-- -- apply
+eval1 (Fun x body :@: v, s, es) | valuable v = pure (subst body x v, s, es)
+eval1 (e@(v1 :+: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
+eval1 (e@(v1 :-: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
+eval1 (e@(v1 :*: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
+eval1 (e@(v1 :/: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
+-- -- push
+eval1 (f :@: e, s, es)
+    | valuable f = pure (e, (f :@:) : s, es)
+    | otherwise  = pure (f, (:@: e) : s, es)
+eval1 (pf@(Perform eff e), s, es)
+    | valuable eff && valuable e = pure $ send eff e s es
+    | valuable eff               = pure (e, Perform eff : s, es)
+    | otherwise                  = pure (eff, flip Perform e : s, es)
+    where send eff v s@(f : _) es =
+            case f hole of
+            WithH (Handler eff' (xv, ev) (xeff, k, eeff)) hole
+                | eff' == eff -> do
+                    let kf = kfun es
+                        eeff' = substs eeff [(xeff, v), (k, kf)]
+                    (eeff', s, [])
+                | otherwise   -> resend
+            _ -> resend
+            where resend = (pf, s, f : es)
+          send _ _ [] es = (Abort, s, es)
+eval1 (Let x e body, s, es)
+    | valuable e = pure (subst body x e, s, es)
+    | otherwise  = pure (e, flip (Let x) body : s, es)
+eval1 (WithH h e, s, es)
     | valuable e = do
         let (x, ev) = vh h
-        ((subst ev x e, s, es), idx)
-    | otherwise  = ((e, WithH h : s, es), idx)
-eval1 (Inst, s, es) idx = ((Eff idx', s, es), idx') where idx' = idx + 1
-eval1 (e1 :+: e2, s, es) idx
-    | valuable e1 = ((e2, (e1 :+:) : s, es), idx)
-    | otherwise   = ((e1, (:+: e2) : s, es), idx)
-eval1 (e1 :-: e2, s, es) idx
-    | valuable e1 = ((e2, (e1 :-:) : s, es), idx)
-    | otherwise   = ((e1, (:-: e2) : s, es), idx)
-eval1 (e1 :*: e2, s, es) idx
-    | valuable e1 = ((e2, (e1 :*:) : s, es), idx)
-    | otherwise   = ((e1, (:*: e2) : s, es), idx)
-eval1 (e1 :/: e2, s, es) idx
-    | valuable e1 = ((e2, (e1 :/:) : s, es), idx)
-    | otherwise   = ((e1, (:/: e2) : s, es), idx)
+        pure (subst ev x e, s, es)
+    | otherwise  = pure (e, WithH h : s, es)
+eval1 (Inst, s, es) = do
+        i <- get
+        let idx' = i + 1
+        put idx'
+        pure (Eff idx', s, es)
+eval1 (e1 :+: e2, s, es)
+    | valuable e1 = pure (e2, (e1 :+:) : s, es)
+    | otherwise   = pure (e1, (:+: e2) : s, es)
+eval1 (e1 :-: e2, s, es)
+    | valuable e1 = pure (e2, (e1 :-:) : s, es)
+    | otherwise   = pure (e1, (:-: e2) : s, es)
+eval1 (e1 :*: e2, s, es)
+    | valuable e1 = pure (e2, (e1 :*:) : s, es)
+    | otherwise   = pure (e1, (:*: e2) : s, es)
+eval1 (e1 :/: e2, s, es)
+    | valuable e1 = pure (e2, (e1 :/:) : s, es)
+    | otherwise   = pure (e1, (:/: e2) : s, es)
 
 eval :: Term -> Stack -> Stack -> EffectP -> Term
 eval t s es = go (t, s, es)
     where go mod idx =
-           case eval1 mod idx of
+           case flip runState idx $ eval1 mod of
            ((v, [], _), _) | valuable v -> v
            (mod', idx')                 -> go mod' idx'
 
