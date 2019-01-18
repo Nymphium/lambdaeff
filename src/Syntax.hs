@@ -14,7 +14,9 @@ data Term = Var String
           | Handler Term (String , Term) (String , String , Term)
           | Int Int
           | Term :+: Term
+          | Term :-: Term
           | Term :*: Term
+          | Term :/: Term
           | Abort
           deriving (Show, Eq)
 

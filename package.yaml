@@ -20,9 +20,16 @@ description:         λeff is a lambda+algebraic effects calculus
 
 dependencies:
 - base >= 4.7 && < 5
+- trifecta == 2
+# - readline
 
 library:
   source-dirs: src
+  dependencies:
+  - bytestring
+  - parsers
+  - lens
+  - unordered-containers
 
 executables:
   lambdaeff-exe:

@@ -28,7 +28,9 @@ subst (Handler eff (xv, ev) (xe, k, ee)) x t = Handler eff' vh effh
                  then ee
                  else subst ee x t
 subst (e1 :+: e2) x t = subst e1 x t :+: subst e2 x t
+subst (e1 :-: e2) x t = subst e1 x t :-: subst e2 x t
 subst (e1 :*: e2) x t = subst e1 x t :*: subst e2 x t
+subst (e1 :/: e2) x t = subst e1 x t :/: subst e2 x t
 subst (Let y e body) x t
     | x == y = Let y (subst e x t) body
     | otherwise = Let y (subst e x t) (subst body x t)
@@ -49,7 +51,9 @@ valuable = \case
 
 binapp :: Term -> Term
 binapp (Int i :+: Int j) = Int $ i + j
+binapp (Int i :-: Int j) = Int $ i - j
 binapp (Int i :*: Int j) = Int $ i * j
+binapp (Int i :/: Int j) = Int $ div i j
 
 hole = Var "HOLE"
 
@@ -70,7 +74,9 @@ eval1 m@(v, [], _) idx | valuable v = (m, idx)
 -- apply
 eval1 (Fun x body :@: v, s, es) idx | valuable v = ((subst body x v, s, es), idx)
 eval1 (e@(v1 :+: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
+eval1 (e@(v1 :-: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
 eval1 (e@(v1 :*: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
+eval1 (e@(v1 :/: v2), s, es) idx | valuable v1 && valuable v2 = ((binapp e, s, es), idx)
 -- push
 eval1 (f :@: e, s, es) idx
     | valuable f = ((e, (f :@:) : s, es), idx)
@@ -104,9 +110,15 @@ eval1 (Inst, s, es) idx = ((Eff idx', s, es), idx') where idx' = idx + 1
 eval1 (e1 :+: e2, s, es) idx
     | valuable e1 = ((e2, (e1 :+:) : s, es), idx)
     | otherwise   = ((e1, (:+: e2) : s, es), idx)
+eval1 (e1 :-: e2, s, es) idx
+    | valuable e1 = ((e2, (e1 :-:) : s, es), idx)
+    | otherwise   = ((e1, (:-: e2) : s, es), idx)
 eval1 (e1 :*: e2, s, es) idx
     | valuable e1 = ((e2, (e1 :*:) : s, es), idx)
     | otherwise   = ((e1, (:*: e2) : s, es), idx)
+eval1 (e1 :/: e2, s, es) idx
+    | valuable e1 = ((e2, (e1 :/:) : s, es), idx)
+    | otherwise   = ((e1, (:/: e2) : s, es), idx)
 
 eval :: Term -> Stack -> Stack -> EffectP -> Term
 eval t s es = go (t, s, es)
