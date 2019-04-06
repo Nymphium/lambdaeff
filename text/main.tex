@@ -50,16 +50,13 @@
         \flatfn{\B{F :: s}} &= \lambda x. \flatfn{s}\ \B{F\left[x\right]}
     \end{flalign*}
 
-    \caption{utils for the semanticcs}
+    \caption{utility function \variable{flatfn}}
 \end{figure}
 
 \begin{figure}[ht]
     \newcommand{\defspace}{\vskip.5\baselineskip}
 
     \centering
-
-    \infax{\model{e}{s}{es} \mapsto \model{e'}{s'}{es'}}
-    \vskip\baselineskip
 
     \infax[Push]{\model{F\left[e\right]}{s}{es} \mapsto \model{e}{F :: s}{es}}%
     \defspace
@@ -95,16 +92,20 @@
     \defspace
 
     \infax[Handle\textsubscript{v}]{%
-        \model{v}{\left(\handlerK \variable{eff} \left(\valK x \rightarrow e_v\right) \left(\left(x, k\right) \rightarrow e_\variable{eff}\right)\right) :: s}{es}%
-        \mapsto%
-        \model{e_v[x = v]}{s}{es}}%
+      \model{v}{F :: s}{es}%
+      \mapsto%
+      \model{e_v[x = v]}{s}{es}\\
+      \begin{array}{ll}
+        \mathrm{where} & F = \withhandle{h\ }{\square} \\
+                       & h = \handlerK \variable{eff} \left(\valK x \rightarrow e_v\right) \left(\left(x, k\right) \rightarrow e_\variable{eff}\right)
+      \end{array}
+    }
     \defspace
 
     \infax[Leak]{%
         \model{\perform{\variable{eff}}{v}}{\left[\right]}{es}%
         \mapsto%
         \textsl{abort}}%
-
-    \caption{the semantics of \lambdaeff}
+\caption{the semantics of \lambdaeff}
 \end{figure}
 \end{document}
