@@ -19,8 +19,8 @@ extra-source-files:
 description:         λeff is a lambda+algebraic effects calculus
 
 dependencies:
-- base >= 4.7 && < 5
-- trifecta == 2
+- base
+- trifecta
 # - readline
 
 library:
