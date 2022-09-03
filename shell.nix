@@ -1,7 +1,7 @@
 let
   pkgs = import ./nix/pkgs.nix;
   hls = pkgs.haskell-language-server.override {
-            # corresponds to lts-20.20
+            # corresponds to lts-19.20
             supportedGhcVersions = [ "902" ];
             dynamic = true;
         };
