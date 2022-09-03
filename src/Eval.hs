@@ -78,8 +78,12 @@ eval1 :: MonadState EffectP m => Model -> m Model
 eval1 (v, f : s, es) | valuable v = pure (f v, s, es)
 -- result
 eval1 m@(v, [], _) | valuable v = pure m
--- -- apply
+-- apply
 eval1 (Fun x body :@: v, s, es) | valuable v = pure (subst body x v, s, es)
+-- push
+eval1 (f :@: e, s, es)
+  | valuable f = pure (e, (f :@:) : s, es)
+  | otherwise = pure (f, (:@: e) : s, es)
 eval1 (e@(e1 :+: e2), s, es)
   | valuable e1 && valuable e2 = pure (binapp e, s, es)
   | valuable e1 = pure (e2, (e1 :+:) : s, es)
@@ -96,17 +100,13 @@ eval1 (e@(e1 :/: e2), s, es)
   | valuable e1 && valuable e2 = pure (binapp e, s, es)
   | valuable e1 = pure (e2, (e1 :/:) : s, es)
   | otherwise = pure (e1, (:/: e2) : s, es)
--- -- push
-eval1 (f :@: e, s, es)
-  | valuable f = pure (e, (f :@:) : s, es)
-  | otherwise = pure (f, (:@: e) : s, es)
 eval1 (pf@(Perform eff e), s, es)
-  | valuable eff && valuable e = pure $ send eff e s es
+  | valuable eff && valuable e = pure $ handleOrThrow eff e s es
   | valuable eff = pure (e, Perform eff : s, es)
   | otherwise = pure (eff, flip Perform e : s, es)
   where
     -- take top of the stack as 'f'
-    send eff v s@(f : s') es =
+    handleOrThrow eff v s@(f : s') es =
       case f hole of
         -- with (handler eff' _ ((x, k) -> e)) □
         WithH (Handler eff' _ (x, k, e)) hole
@@ -115,11 +115,11 @@ eval1 (pf@(Perform eff e), s, es)
                 e' = substs e [(x, v), (k, k')]
             -- 'f' remains in 's': it means the handler is *deep*
             (e', s, [])
-          | otherwise -> resend
-        _ -> resend
+          | otherwise -> throw
+        _ -> throw
       where
-        resend = (pf, s', f : es)
-    send _ _ [] es = (Abort, s, es)
+        throw = (pf, s', f : es)
+    handleOrThrow _ _ [] es = (Abort, s, es)
 eval1 (Let x e body, s, es)
   | valuable e = pure (subst body x e, s, es)
   | otherwise = pure (e, flip (Let x) body : s, es)
