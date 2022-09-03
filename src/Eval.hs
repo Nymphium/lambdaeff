@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
 
 module Eval (run) where
 
@@ -21,19 +20,14 @@ subst (Perform eff e) x t = Perform (subst eff x t) (subst e x t)
 subst (Fun xf body) x t
   | xf == x = Fun xf body
   | otherwise = Fun xf (subst body x t)
-subst (Handler eff (xv, ev) (xe, k, ee)) x t = Handler eff' vh effh
+subst (Handler eff vh@(xv, ev) effh@(xe, k, ee)) x t = Handler (subst eff x t) vh' effh'
   where
-    eff' = subst eff x t
-    vh =
-      (xv,) $
-        if xv == x
-          then ev
-          else subst ev x t
-    effh =
-      (xe,k,) $
-        if xe == x || k == x
-          then ee
-          else subst ee x t
+    vh'
+      | xv == x = vh
+      | otherwise = (xv, subst ev x t)
+    effh'
+      | xe == x || k == x = effh
+      | otherwise = (xe, k, subst ee x t)
 subst (e1 :+: e2) x t = subst e1 x t :+: subst e2 x t
 subst (e1 :-: e2) x t = subst e1 x t :-: subst e2 x t
 subst (e1 :*: e2) x t = subst e1 x t :*: subst e2 x t
@@ -62,7 +56,7 @@ binapp :: Term -> Term
 binapp (Int i :+: Int j) = Int $ i + j
 binapp (Int i :-: Int j) = Int $ i - j
 binapp (Int i :*: Int j) = Int $ i * j
-binapp (Int i :/: Int j) = Int $ div i j
+binapp (Int i :/: Int j) = Int $ i `div` j
 
 -- the hole in evaluation context
 hole = Var "□"
@@ -76,8 +70,10 @@ vh (Handler _ it _) = it
 
 effh (Handler _ _ it) = it
 
+type Model = (Term, Stack, Stack)
+
 -- small-step evaluation
-eval1 :: MonadState EffectP m => (Term, Stack, Stack) -> m (Term, Stack, Stack)
+eval1 :: MonadState EffectP m => Model -> m Model
 -- pop
 eval1 (v, f : s, es) | valuable v = pure (f v, s, es)
 -- result
