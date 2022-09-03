@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TupleSections #-}
 
-module Eval where
+module Eval (run) where
 
 import Control.Monad.State
 import Syntax
@@ -84,10 +84,22 @@ eval1 (v, f : s, es) | valuable v = pure (f v, s, es)
 eval1 m@(v, [], _) | valuable v = pure m
 -- -- apply
 eval1 (Fun x body :@: v, s, es) | valuable v = pure (subst body x v, s, es)
-eval1 (e@(v1 :+: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
-eval1 (e@(v1 :-: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
-eval1 (e@(v1 :*: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
-eval1 (e@(v1 :/: v2), s, es) | valuable v1 && valuable v2 = pure (binapp e, s, es)
+eval1 (e@(e1 :+: e2), s, es)
+  | valuable e1 && valuable e2 = pure (binapp e, s, es)
+  | valuable e1 = pure (e2, (e1 :+:) : s, es)
+  | otherwise = pure (e1, (:+: e2) : s, es)
+eval1 (e@(e1 :-: e2), s, es)
+  | valuable e1 && valuable e2 = pure (binapp e, s, es)
+  | valuable e1 = pure (e2, (e1 :-:) : s, es)
+  | otherwise = pure (e1, (:-: e2) : s, es)
+eval1 (e@(e1 :*: e2), s, es)
+  | valuable e1 && valuable e2 = pure (binapp e, s, es)
+  | valuable e1 = pure (e2, (e1 :*:) : s, es)
+  | otherwise = pure (e1, (:*: e2) : s, es)
+eval1 (e@(e1 :/: e2), s, es)
+  | valuable e1 && valuable e2 = pure (binapp e, s, es)
+  | valuable e1 = pure (e2, (e1 :/:) : s, es)
+  | otherwise = pure (e1, (:/: e2) : s, es)
 -- -- push
 eval1 (f :@: e, s, es)
   | valuable f = pure (e, (f :@:) : s, es)
@@ -125,18 +137,6 @@ eval1 (Inst, s, es) = do
   let idx' = i + 1
   put idx'
   pure (Eff idx', s, es)
-eval1 (e1 :+: e2, s, es)
-  | valuable e1 = pure (e2, (e1 :+:) : s, es)
-  | otherwise = pure (e1, (:+: e2) : s, es)
-eval1 (e1 :-: e2, s, es)
-  | valuable e1 = pure (e2, (e1 :-:) : s, es)
-  | otherwise = pure (e1, (:-: e2) : s, es)
-eval1 (e1 :*: e2, s, es)
-  | valuable e1 = pure (e2, (e1 :*:) : s, es)
-  | otherwise = pure (e1, (:*: e2) : s, es)
-eval1 (e1 :/: e2, s, es)
-  | valuable e1 = pure (e2, (e1 :/:) : s, es)
-  | otherwise = pure (e1, (:/: e2) : s, es)
 
 eval :: Term -> Stack -> Stack -> EffectP -> Term
 eval t s es = go (t, s, es)
